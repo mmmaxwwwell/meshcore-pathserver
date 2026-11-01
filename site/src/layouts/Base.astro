@@ -1,0 +1,38 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  page: 'about' | 'explore';
+}
+const { title, description, page } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="site">
+      <div class="wrap">
+        <a class="brand" href="/">MeshCore Paths</a>
+        <nav>
+          <a href="/" aria-current={page === 'about' ? 'page' : undefined}>What it is</a>
+          <a href="/explore/" aria-current={page === 'explore' ? 'page' : undefined}>Explore</a>
+        </nav>
+      </div>
+    </header>
+    <main class="wrap"><slot /></main>
+    <footer class="site">
+      <div class="wrap">
+        Built from radio packets anyone can hear. No messages are stored or published.
+        <a href="https://blog.mmmaxwwwell.dev">blog.mmmaxwwwell.dev</a>
+      </div>
+    </footer>
+  </body>
+</html>

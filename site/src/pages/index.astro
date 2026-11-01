@@ -1,0 +1,101 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base
+  title="MeshCore Paths"
+  description="A path server for MeshCore: it maps the repeater backbone from the packets it hears, and answers direct messages with the best path between two nodes."
+  page="about"
+>
+  <h1>Ask the mesh for a path.</h1>
+  <p class="lede">
+    A MeshCore path server listens to the mesh, works out which repeaters can hear
+    which, and answers a direct message with the best direct path from you to
+    anyone. You stop flooding the whole network to reach one person.
+  </p>
+
+  <div class="stats" id="stats" aria-live="polite">
+    <div class="stat"><b data-k="nodes">–</b><span>repeaters mapped</span></div>
+    <div class="stat"><b data-k="links">–</b><span>links published</span></div>
+    <div class="stat"><b data-k="observers">–</b><span>observers</span></div>
+    <div class="stat"><b data-k="generated">–</b><span>last update</span></div>
+  </div>
+  <p><a href="/explore/">Explore the map and look up a route →</a> <span class="badge" id="sample" hidden>sample data</span></p>
+
+  <h2>How to use it</h2>
+  <div class="card">
+    <p style="margin-top:0">Send a direct message to a path server node:</p>
+    <p class="mono">path Example Ridge</p>
+    <p>It answers with the hops to use, or tells you to flood when it isn't confident:</p>
+    <p class="mono">#path1 5f3c19e0b7a2 w=1 4e,a1,73 c=0.97</p>
+    <p class="mono" style="margin-bottom:0">#path1 5f3c19e0b7a2 flood</p>
+  </div>
+
+  <h2>How it works</h2>
+  <div class="grid3">
+    <div class="card">
+      <h3>1. Listen</h3>
+      <p>Each flood packet carries the hash of every repeater that relayed it. A packet that
+      arrives via <span class="mono">A → B → C</span> proves B hears A and C hears B.
+      The observer keeps only the path and the adverts. Message contents stay encrypted
+      and are thrown away.</p>
+    </div>
+    <div class="card">
+      <h3>2. Work out who's who</h3>
+      <p>Most repeaters still use a 1-byte hash, so dozens share each value. The resolver
+      rules candidates out (wrong type, too far apart, not heard directly, gone quiet). It
+      then weighs the rest against links already known to be real, and gives every link a
+      confidence score.</p>
+    </div>
+    <div class="card">
+      <h3>3. Answer only when sure</h3>
+      <p>Routes use only high-confidence links. They avoid hops where a second repeater with
+      the same hash would also forward the packet. They use 2- or 3-byte hashes when every
+      repeater on the way supports them. Otherwise the answer is "flood".</p>
+    </div>
+  </div>
+
+  <h2>Built to grow</h2>
+  <pre class="diagram">observer (radio + computer) ── signed batches ──▶ ingest ──▶ observation store
+                                                                │ every ~10 min
+                                                                ▼
+                                                            resolver
+                                                                │
+                              graph-&lt;hash&gt;.json (immutable) + latest.json
+                                                                │ CDN
+                    ┌───────────────────────────────────────────┴──────────┐
+              this site (route lookup runs in your browser)     every path server's answers</pre>
+  <p>Visitors only ever load static files from the CDN. Graph files are named by their
+  hash, so they never change and are cached forever. Route lookup runs in your
+  browser. More observers mean a bigger, more accurate map without more load on any one
+  machine: each radio only sees the routes that reach it, so merging what several
+  radios hear fills in the gaps.</p>
+
+  <h2>Privacy</h2>
+  <ul>
+    <li>Never stored or published: message contents (DMs, channels, rooms), who sent what, or when.</li>
+    <li>Published: repeaters and rooms (name, key prefix, advertised location) and the links
+    between them. Repeaters already broadcast all of this to everyone in range.</li>
+    <li>Observers are never named, and their own direct links are left out, so the map does not
+    reveal where an observer sits.</li>
+    <li>Phones and handheld companions never appear.</li>
+  </ul>
+
+  <script>
+    import { loadGraph } from '../lib/data.ts';
+    loadGraph().then((g) => {
+      const set = (k: string, v: string) => {
+        const el = document.querySelector(`#stats [data-k="${k}"]`);
+        if (el) el.textContent = v;
+      };
+      set('nodes', g.nodes.length.toLocaleString());
+      set('links', g.links.length.toLocaleString());
+      set('observers', g.sample ? '–' : String(g.stats.observers));
+      const mins = Math.round((Date.now() - Date.parse(g.generated)) / 60000);
+      set('generated', mins < 60 ? `${Math.max(mins, 0)} min ago` : mins < 2880 ? `${Math.round(mins / 60)} h ago` : `${Math.round(mins / 1440)} days ago`);
+      if (g.sample) document.getElementById('sample')!.hidden = false;
+    }).catch(() => {
+      const el = document.querySelector('#stats [data-k="generated"]');
+      if (el) el.textContent = 'unavailable';
+    });
+  </script>
+</Base>

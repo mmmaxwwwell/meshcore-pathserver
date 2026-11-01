@@ -1,0 +1,91 @@
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --text: #1c1d1f;
+  --muted: #5d6066;
+  --line: #dddbd3;
+  --accent: #0b6e5f;
+  --accent-soft: #d8efe9;
+  --warn: #9a5b00;
+  --warn-soft: #fbecd2;
+  --link-weak: #b8b6ae;
+  --node: #33363b;
+  --mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121315;
+    --surface: #1b1d20;
+    --text: #e8e7e3;
+    --muted: #9da0a6;
+    --line: #2e3135;
+    --accent: #4fc7b1;
+    --accent-soft: #163a34;
+    --warn: #f0b358;
+    --warn-soft: #3a2c14;
+    --link-weak: #4a4d52;
+    --node: #d6d5d0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121315; --surface: #1b1d20; --text: #e8e7e3; --muted: #9da0a6; --line: #2e3135;
+  --accent: #4fc7b1; --accent-soft: #163a34; --warn: #f0b358; --warn-soft: #3a2c14;
+  --link-weak: #4a4d52; --node: #d6d5d0; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 var(--sans);
+}
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+header.site { border-bottom: 1px solid var(--line); }
+header.site .wrap { display: flex; align-items: baseline; gap: 24px; padding-block: 14px; flex-wrap: wrap; }
+header.site .brand { font-weight: 700; color: var(--text); text-decoration: none; }
+header.site nav { display: flex; gap: 18px; }
+header.site nav a { color: var(--muted); text-decoration: none; }
+header.site nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
+
+main { padding-block: 40px 64px; }
+h1 { font-size: clamp(1.9rem, 4.5vw, 2.6rem); line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.01em; }
+h2 { font-size: 1.35rem; margin: 48px 0 12px; }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 44em; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.grid3 .card h3 { margin: 0 0 6px; font-size: 1rem; }
+.grid3 .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 20px 0; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat b { display: block; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 0.85rem; }
+
+pre.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; font: 13px/1.45 var(--mono); }
+
+.badge { display: inline-block; font-size: 0.8rem; padding: 2px 8px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+
+.explore { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 760px) { .explore { grid-template-columns: 1fr; } }
+.map { overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; width: 100%; height: auto; display: block; touch-action: manipulation; }
+.map line { stroke: var(--link-weak); stroke-linecap: round; }
+.map line.route { stroke: var(--accent); stroke-width: 3.5; }
+.map circle { fill: var(--node); cursor: pointer; }
+.map circle.room { fill: var(--muted); }
+.map circle.end, .map circle.relay { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+.panel label { display: block; font-size: 0.85rem; color: var(--muted); margin: 10px 0 4px; }
+.panel input, .panel select { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.panel ol { padding-left: 1.3em; margin: 8px 0; }
+.panel .wire { font-family: var(--mono); font-size: 0.85rem; background: var(--accent-soft); padding: 8px 10px; border-radius: 8px; word-break: break-all; }
+.panel .warn { background: var(--warn-soft); color: var(--warn); padding: 8px 10px; border-radius: 8px; font-size: 0.9rem; }
+.muted { color: var(--muted); }
+footer.site { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+footer.site .wrap { padding-block: 20px; }

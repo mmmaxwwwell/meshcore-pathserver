@@ -1,0 +1,15 @@
+{
+  "name": "meshcore-pathserver-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^5.18.1"
+  }
+}

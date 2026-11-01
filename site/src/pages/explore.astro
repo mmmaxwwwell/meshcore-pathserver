@@ -1,0 +1,164 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base
+  title="Explore · MeshCore Paths"
+  description="The MeshCore repeater backbone as a path server sees it, with route lookup between any two repeaters."
+  page="explore"
+>
+  <h1>Explore</h1>
+  <p class="muted" id="summary">Loading the latest graph…</p>
+
+  <div class="explore">
+    <svg class="map" id="map" viewBox="0 0 1000 700" role="img" aria-label="Map of repeaters and the links between them"></svg>
+
+    <div class="panel card">
+      <label for="from">From</label>
+      <input id="from" list="names" autocomplete="off" placeholder="name or key prefix" />
+      <label for="to">To</label>
+      <input id="to" list="names" autocomplete="off" placeholder="name or key prefix" />
+      <datalist id="names"></datalist>
+      <label for="conf">Minimum link confidence: <span id="confv">0.90</span></label>
+      <input id="conf" type="range" min="0.5" max="0.99" step="0.01" value="0.9" />
+      <p class="muted" style="font-size:.85rem;margin:8px 0 0">Tip: tap a dot to set From, then To.</p>
+      <div id="result" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script>
+    import { loadGraph } from '../lib/data.ts';
+    import { findRoute, type Graph } from '../lib/route.ts';
+
+    const SVG = 'http://www.w3.org/2000/svg';
+    const W = 1000, H = 700, PAD = 30;
+    const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+    function el(tag: string, attrs: Record<string, string | number>, text?: string) {
+      const e = document.createElementNS(SVG, tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      if (text !== undefined) {
+        const t = document.createElementNS(SVG, 'title');
+        t.textContent = text;
+        e.appendChild(t);
+      }
+      return e;
+    }
+
+    function html(tag: string, text: string, cls?: string) {
+      const e = document.createElement(tag);
+      e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+
+    function draw(g: Graph) {
+      const located = g.nodes.map((n, i) => ({ n, i })).filter(({ n }) => n.lat !== null && n.lon !== null);
+      // Fit the central 90% plus a margin, so a sparse tail (or one far-off repeater) does not shrink
+      // the dense core into a corner. Outliers sit off-canvas; they are still routable.
+      const q = (xs: number[], f: number) => { const v = [...xs].sort((a, b) => a - b); return v[Math.min(v.length - 1, Math.floor(f * v.length))]; };
+      const lats = located.map(({ n }) => n.lat!), lons = located.map(({ n }) => n.lon!);
+      const tail = located.length > 50 ? 0.05 : 0;
+      let [la0, la1, lo0, lo1] = [q(lats, tail), q(lats, 1 - tail), q(lons, tail), q(lons, 1 - tail)];
+      if (tail) {
+        const [mla, mlo] = [(la1 - la0) * 0.08, (lo1 - lo0) * 0.08];
+        [la0, la1, lo0, lo1] = [la0 - mla, la1 + mla, lo0 - mlo, lo1 + mlo];
+      }
+      const r = located.length > 300 ? 3 : located.length > 120 ? 4 : 5;
+      const kx = Math.cos(((la0 + la1) / 2) * Math.PI / 180);
+      const s = Math.min((W - 2 * PAD) / ((lo1 - lo0) * kx || 1), (H - 2 * PAD) / ((la1 - la0) || 1));
+      const xy = new Map<number, [number, number]>();
+      for (const { n, i } of located) xy.set(i, [PAD + (n.lon! - lo0) * kx * s, H - PAD - (n.lat! - la0) * s]);
+
+      const map = $('map') as unknown as SVGSVGElement;
+      map.replaceChildren();
+      const linkLayer = el('g', {}), routeLayer = el('g', {}), nodeLayer = el('g', {});
+      map.append(linkLayer, routeLayer, nodeLayer);
+      for (const l of g.links) {
+        const a = xy.get(l.a), b = xy.get(l.b);
+        if (!a || !b) continue;
+        linkLayer.appendChild(el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], 'stroke-width': 0.6 + l.conf * 1.4, 'stroke-opacity': 0.25 + l.conf * 0.55 }));
+      }
+      const dots = new Map<number, SVGElement>();
+      for (const [i, [x, y]] of xy) {
+        const n = g.nodes[i];
+        const c = el('circle', { cx: x, cy: y, r, class: n.type === 'room' ? 'room' : '' }, `${n.name} · ${n.id}`);
+        c.addEventListener('click', () => pick(i));
+        nodeLayer.appendChild(c);
+        dots.set(i, c);
+      }
+      return { xy, dots, routeLayer };
+    }
+
+    loadGraph().then((g) => {
+      const label = (i: number) => `${g.nodes[i].name} (${g.nodes[i].id.slice(0, 6)})`;
+      const byLabel = new Map(g.nodes.map((_, i) => [label(i), i]));
+      const names = $('names');
+      for (const i of g.nodes.keys()) {
+        const o = document.createElement('option');
+        o.value = label(i);
+        names.appendChild(o);
+      }
+      const unlocated = g.nodes.filter((n) => n.lat === null).length;
+      $('summary').textContent =
+        `${g.nodes.length} repeaters, ${g.links.length} links, updated ${new Date(g.generated).toLocaleString()}` +
+        (unlocated ? ` · ${unlocated} without a location are not drawn but can be routed` : '') +
+        (g.sample ? ' · SAMPLE DATA, not a real network' : '');
+
+      const view = draw(g);
+      const from = $<HTMLInputElement>('from'), to = $<HTMLInputElement>('to'), conf = $<HTMLInputElement>('conf');
+
+      const resolve = (v: string) => {
+        if (byLabel.has(v)) return byLabel.get(v)!;
+        const q = v.trim().toLowerCase();
+        if (!q) return null;
+        const hits = [...g.nodes.keys()].filter((i) => g.nodes[i].id.startsWith(q) || g.nodes[i].name.toLowerCase() === q);
+        return hits.length === 1 ? hits[0] : null;
+      };
+
+      function update() {
+        $('confv').textContent = Number(conf.value).toFixed(2);
+        const a = resolve(from.value), b = resolve(to.value);
+        const out = $('result');
+        out.replaceChildren();
+        view.routeLayer.replaceChildren();
+        for (const d of view.dots.values()) d.classList.remove('end', 'relay');
+        for (const i of [a, b]) if (i !== null) view.dots.get(i)?.classList.add('end');
+        if (a === null || b === null || a === b) return;
+        const r = findRoute(g, a, b, { minConf: Number(conf.value), hopPenalty: 0.05 });
+        if (!r) {
+          out.append(html('p', 'No route clears this confidence. A path server would answer:'), html('div', `#path1 ${g.nodes[b].id} flood`, 'wire'));
+          return;
+        }
+        for (let k = 1; k < r.nodes.length; k++) {
+          const p = view.xy.get(r.nodes[k - 1]), q = view.xy.get(r.nodes[k]);
+          if (p && q) view.routeLayer.appendChild(el('line', { x1: p[0], y1: p[1], x2: q[0], y2: q[1], class: 'route' }));
+        }
+        for (const i of r.nodes.slice(1, -1)) view.dots.get(i)?.classList.add('relay');
+        const relays = r.nodes.length - 2;
+        out.append(html('p', relays === 0
+          ? `They hear each other directly (confidence ${r.conf.toFixed(2)}): no relays needed.`
+          : `${relays} relay hop${relays === 1 ? '' : 's'}, confidence ${r.conf.toFixed(2)}, ${r.width}-byte hashes`));
+        const ol = document.createElement('ol');
+        for (const i of r.nodes) ol.appendChild(html('li', label(i)));
+        out.append(ol, html('div', r.text, 'wire'));
+        for (const amb of r.ambiguities) {
+          const others = amb.others.map(label).join(', ');
+          out.append(html('p', `Hop ${amb.hop} (${r.hops[amb.hop - 1]}) is also forwarded by ${others}, which can hear the previous hop.`, 'warn'));
+        }
+      }
+
+      let next: 'from' | 'to' = 'from';
+      pickImpl = (i: number) => {
+        (next === 'from' ? from : to).value = label(i);
+        next = next === 'from' ? 'to' : 'from';
+        update();
+      };
+      for (const e of [from, to, conf]) e.addEventListener('input', update);
+    }).catch((e) => {
+      $('summary').textContent = `Could not load the graph (${e instanceof Error ? e.message : e}).`;
+    });
+
+    let pickImpl: (i: number) => void = () => {};
+    function pick(i: number) { pickImpl(i); }
+  </script>
+</Base>
