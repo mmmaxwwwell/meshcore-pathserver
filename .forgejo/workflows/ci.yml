@@ -1,0 +1,75 @@
+# MeshCore Paths CI. Runs on a Forgejo runner with label `nix`; every tool
+# comes from this repo's flake (Node, wrangler, OpenTofu + the Cloudflare
+# provider), so nothing is installed or downloaded ad hoc.
+#
+#   every push / PR   site: npm ci, unit tests, build
+#                     infra: tofu fmt + validate, and a plan when secrets exist
+#   push to main      tofu apply, then deploy the built site to Pages
+#
+# Secrets (repo settings -> Actions -> Secrets):
+#   CLOUDFLARE_API_TOKEN        Account: Pages Edit, Workers R2 Storage Edit;
+#                               Zone mmmaxwwwell.dev: DNS Edit, Zone Read
+#   CLOUDFLARE_ACCOUNT_ID       the account the resources live in
+#   R2_STATE_ACCESS_KEY_ID      R2 API token (S3 keys) limited to the
+#   R2_STATE_SECRET_ACCESS_KEY  meshcore-paths-tfstate bucket
+#   TF_STATE_PASSPHRASE         encrypts state and plans (infra/README.md)
+name: ci
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    runs-on: nix
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+      TF_VAR_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_state_passphrase: ${{ secrets.TF_STATE_PASSPHRASE }}
+      TF_IN_AUTOMATION: '1'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Site (install, test, build)
+        working-directory: site
+        run: |
+          nix develop .. -c npm ci --no-fund --no-audit
+          nix develop .. -c npm test
+          nix develop .. -c npm run build
+
+      - name: Infra (format, validate)
+        working-directory: infra
+        run: |
+          nix develop .. -c tofu fmt -check -diff -recursive
+          nix develop .. -c tofu init -backend=false -input=false
+          nix develop .. -c tofu validate
+
+      - name: Infra plan
+        id: plan
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        working-directory: infra
+        run: |
+          rm -rf .terraform
+          nix develop .. -c tofu init -input=false \
+            -backend-config="endpoints={s3=\"https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com\"}"
+          nix develop .. -c tofu plan -input=false -lock-timeout=5m -out=tfplan
+
+      - name: Infra apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.plan.outcome == 'success'
+        working-directory: infra
+        run: nix develop .. -c tofu apply -input=false -lock-timeout=5m tfplan
+
+      - name: Deploy site
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.plan.outcome == 'success'
+        working-directory: site
+        run: |
+          nix develop .. -c wrangler pages deploy dist --project-name meshcore-paths \
+            --branch main --commit-hash "$GITHUB_SHA" --commit-message "ci ${GITHUB_SHA::12}"

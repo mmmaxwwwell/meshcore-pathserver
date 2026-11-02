@@ -1,9 +1,0 @@
-# Cloudflare Pages project for paths.mmmaxwwwell.dev.
-# The R2 bucket holds latest.json + graph-<sha256>.json; functions/data serves them.
-name = "meshcore-paths"
-pages_build_output_dir = "dist"
-compatibility_date = "2026-11-01"
-
-[[r2_buckets]]
-binding = "DATA"
-bucket_name = "meshcore-paths-data"

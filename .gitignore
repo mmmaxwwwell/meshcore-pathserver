@@ -4,3 +4,7 @@ site/.astro/
 site/.wrangler/
 *.db
 *.sqlite
+infra/.terraform/
+infra/tfplan
+*.tfstate
+*.tfstate.*

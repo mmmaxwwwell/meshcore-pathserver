@@ -25,6 +25,9 @@ npm run build          # static site in dist/
 site/public/data`). Real snapshots live only in the R2 bucket; the Pages
 Function in `site/functions/data/` serves them and falls back to the sample.
 
-Deployment: Cloudflare Pages project `meshcore-paths` (`site/wrangler.toml`),
-R2 bucket `meshcore-paths-data` bound as `DATA`, custom domain
-`paths.mmmaxwwwell.dev`.
+## Infrastructure and deployment
+
+Cloudflare (Pages project `meshcore-paths`, R2 bucket `meshcore-paths-data`
+bound as `DATA`, `paths.mmmaxwwwell.dev`) is OpenTofu in [`infra/`](infra/README.md).
+The Forgejo workflow `.forgejo/workflows/ci.yml` tests and builds every push,
+plans infra changes, and on `main` applies them and deploys the site.

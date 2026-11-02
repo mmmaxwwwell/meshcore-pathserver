@@ -4,7 +4,7 @@
 // sample data in public/data when R2 has no such object (local dev, first deploy).
 
 interface Env {
-  DATA: R2Bucket;
+  DATA?: R2Bucket; // unbound until R2 is enabled on the account: serve the static sample
 }
 
 const NAME = /^(latest\.json|graph-[0-9a-f]{64}\.json)$/;
@@ -13,6 +13,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ params, env, next }) =>
   const parts = Array.isArray(params.path) ? params.path : [params.path];
   const name = parts.join("/");
   if (!NAME.test(name)) return new Response("not found", { status: 404 });
+  if (!env.DATA) return next();
   const obj = await env.DATA.get(name);
   if (!obj) return next();
   const immutable = name !== "latest.json";
