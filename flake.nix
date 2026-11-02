@@ -29,6 +29,7 @@
         cyclonedx-cli                # SBOM validate/merge; sbomnix (Nix toolchain) and semgrep (SAST) above
         cosign                       # signs SBOMs and the site bundle
         actionlint zizmor shellcheck # CI and script lint
+        renovate                     # dependency update PRs (renovate.yml)
         jq
       ]);
     in {

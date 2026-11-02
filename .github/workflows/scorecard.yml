@@ -8,14 +8,21 @@ on:
     - cron: '23 7 * * 1'
   workflow_dispatch:
 
-permissions: read-all
+permissions: {}
+
+concurrency:
+  group: scorecard
+  cancel-in-progress: true
 
 jobs:
   analysis:
+    name: Scorecard analysis
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
-      id-token: write
+      contents: read          # check out and read the repo
+      actions: read           # read workflow runs (CI and SAST checks)
+      security-events: write  # upload the SARIF to code scanning
+      id-token: write         # publish_results: sign the results for the public Scorecard API
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

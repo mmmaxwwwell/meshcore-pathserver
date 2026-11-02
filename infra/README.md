@@ -2,7 +2,9 @@
 
 OpenTofu for everything on Cloudflare: the R2 data bucket, the Pages project
 (with its R2 binding), the custom domain and its DNS record. CI applies it on
-every push to `main` (`.forgejo/workflows/ci.yml`); nobody runs `apply` by hand.
+every push to `main` (`.forgejo/workflows/ci.yml` job `deploy`, via
+`ci/infra.sh apply`, only after the secret-free scan gate passed); branch
+pushes get a plan. Nobody runs `apply` by hand.
 
 State is in R2 (`meshcore-paths-tfstate`, S3 backend, native lockfile) and
 encrypted with OpenTofu's state encryption (pbkdf2 passphrase). It is never

@@ -8,7 +8,7 @@
 # Stages (each writes machine-readable output under reports/; the last stage
 # fails the run if any scanner wrote nothing, so a silently skipped scan can
 # never pass):
-#   lint     shellcheck, actionlint, zizmor (workflow security), tofu fmt
+#   lint     shellcheck, actionlint, zizmor (workflow security, auditor), tofu fmt
 #   site     npm ci, npm audit, unit tests (must run > 0), build
 #   infra    tofu validate, trivy config (IaC misconfiguration)
 #   secrets  gitleaks (full git history + build output), trufflehog (same,
@@ -48,7 +48,7 @@ gate() {  # name, command...: run, remember failure, keep going so every report 
 stage lint
 gate shellcheck shellcheck ci/*.sh .githooks/*
 gate actionlint actionlint -shellcheck= -config-file ci/actionlint.yaml .forgejo/workflows/*.yml .github/workflows/*.yml
-gate zizmor sh -c 'zizmor --offline --format sarif .forgejo/workflows .github/workflows >"$0/zizmor.sarif"; s=$?; zizmor --offline .forgejo/workflows .github/workflows; exit $s' "$R"
+gate zizmor sh -c 'zizmor --offline --persona=auditor --config .github/zizmor.yml --format sarif .forgejo/workflows/*.yml .github/workflows/*.yml >"$0/zizmor.sarif"; s=$?; zizmor --offline --persona=auditor --config .github/zizmor.yml .forgejo/workflows/*.yml .github/workflows/*.yml; exit $s' "$R"
 gate "tofu fmt" tofu -chdir=infra fmt -check -diff -recursive
 
 stage site

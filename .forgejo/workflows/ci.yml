@@ -1,14 +1,18 @@
 # MeshCore Paths CI (Forgejo, runner label `nix`). Every tool comes from this
 # repo's flake; every action is pinned by commit.
 #
-#   push / PR / weekly   ci/pre-pr.sh: lint, tests, build, secret scanning
-#                        (gitleaks + trufflehog), SAST (semgrep), SCA (trivy,
-#                        grype, osv-scanner, npm audit), IaC scan, SBOMs.
-#                        Reports kept as an artifact for 90 days.
-#   push / PR            tofu plan (when the Cloudflare secrets exist)
-#   push to main         tofu apply, sign SBOMs + bundle (cosign), deploy
+#   gate    every push / PR / weekly. ci/pre-pr.sh: lint, tests, build, secret
+#           scanning (gitleaks + trufflehog), SAST (semgrep), SCA + licenses
+#           (trivy, grype, osv-scanner, npm audit), IaC scan, SBOMs. NO secrets.
+#           Uploads the reports (90 days) and the scanned site bundle.
+#   plan    push to a branch other than main, after gate: tofu plan.
+#   deploy  push to main, after gate: tofu plan + apply, sign the SBOMs and
+#           the bundle (cosign), deploy THE BUNDLE GATE SCANNED (never rebuilt).
 #
-# Secrets reach only the steps that use them; the scan step gets none.
+# Pull requests and scheduled runs never see a secret. Forgejo has no
+# deployment environments, so secret scope is enforced by job conditions
+# instead (zizmor's secrets-outside-env is configured off in .github/zizmor.yml
+# for that reason).
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID         infra + deploy
 #   R2_STATE_ACCESS_KEY_ID, R2_STATE_SECRET_ACCESS_KEY  OpenTofu state (R2)
 #   TF_STATE_PASSPHRASE                                 state encryption
@@ -22,14 +26,15 @@ on:
     - cron: '17 6 * * 1'   # new advisories land without new commits
 
 permissions:
-  contents: read
+  contents: read  # checkout only
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  ci:
+  gate:
+    name: Gate (lint, test, build, scan, SBOM)
     runs-on: nix
     timeout-minutes: 60
     steps:
@@ -37,10 +42,8 @@ jobs:
         with:
           fetch-depth: 0          # gitleaks / trufflehog scan the whole history
           persist-credentials: false
-
-      - name: Gate (lint, test, build, scan, SBOM)
+      - name: ci/pre-pr.sh
         run: nix develop -c ci/pre-pr.sh
-
       - name: Keep reports
         if: always()
         uses: forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
@@ -48,10 +51,24 @@ jobs:
           name: security-reports
           path: reports/
           retention-days: 90
+      - name: Hand the scanned bundle to deploy
+        uses: forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: site-dist
+          path: site/dist/
+          retention-days: 7
 
-      - name: Infra plan
-        id: plan
-        if: github.event_name != 'schedule'
+  plan:
+    name: Infra plan
+    needs: gate
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: nix
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: tofu plan
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -60,21 +77,24 @@ jobs:
           TF_VAR_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_state_passphrase: ${{ secrets.TF_STATE_PASSPHRASE }}
           TF_IN_AUTOMATION: '1'
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "no Cloudflare secrets (fork PR or not bootstrapped): plan skipped"
-            echo "planned=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-          nix develop -c bash -euo pipefail -c '
-            cd infra
-            rm -rf .terraform
-            tofu init -input=false -backend-config="endpoints={s3=\"https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com\"}"
-            tofu plan -input=false -lock-timeout=5m -out=tfplan'
-          echo "planned=true" >>"$GITHUB_OUTPUT"
+        run: nix develop -c ci/infra.sh plan
 
-      - name: Apply, sign, deploy
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.plan.outputs.planned == 'true'
+  deploy:
+    name: Apply, sign, deploy
+    needs: gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: nix
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Fetch the scanned bundle
+        uses: forgejo/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+        with:
+          name: site-dist
+          path: site/dist/
+      - name: tofu plan + apply
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -82,14 +102,18 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
           TF_VAR_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_state_passphrase: ${{ secrets.TF_STATE_PASSPHRASE }}
+          TF_IN_AUTOMATION: '1'
+        run: nix develop -c ci/infra.sh apply
+      - name: Sign
+        env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          TF_IN_AUTOMATION: '1'
+        run: nix develop -c ci/sign.sh
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
         run: |
-          nix develop -c bash -euo pipefail -c '
-            (cd infra && tofu apply -input=false -lock-timeout=5m tfplan)
-            ci/sign.sh
-            cd site
-            wrangler pages deploy dist --project-name meshcore-paths --branch main \
-              --commit-hash "$GITHUB_SHA" --commit-message "ci ${GITHUB_SHA:0:12}"'
+          nix develop -c wrangler pages deploy site/dist --project-name meshcore-paths --branch main \
+            --commit-hash "$GITHUB_SHA" --commit-message "ci ${GITHUB_SHA:0:12}"

@@ -26,6 +26,10 @@ scope: anything that lets the public graph reveal where an observer is
   run and the counts are reported, but they do not gate: those tools never
   ship, and CVE matching against nixpkgs version strings is mostly false
   positives (nixpkgs patches in place). The full list is in the CI reports.
+- **Updates:** Renovate (weekly, on Forgejo) opens PRs for npm packages,
+  flake inputs and CI action digests; security fixes immediately. Each PR
+  passes the full gate before merge. Property-based tests (fast-check)
+  check the route finder against a brute-force reference.
 - **Infrastructure:** OpenTofu (`infra/`) scanned by Trivy; state encrypted.
 - **CI:** actions pinned by commit, workflow security lint (zizmor,
   actionlint), least-privilege tokens, secrets only on the steps that use them.

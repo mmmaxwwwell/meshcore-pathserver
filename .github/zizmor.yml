@@ -1,0 +1,8 @@
+# zizmor runs at the auditor persona (every finding) in ci/pre-pr.sh.
+rules:
+  secrets-outside-env:
+    # Forgejo Actions has no deployment environments. Secret scope is enforced
+    # by job conditions instead: only `plan` (branch pushes) and `deploy`
+    # (main) get secrets, both after the secret-free gate; PRs and scheduled
+    # runs never do. See .forgejo/workflows/ci.yml header.
+    disable: true
