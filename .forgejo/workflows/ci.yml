@@ -2,7 +2,7 @@
 # comes from this repo's flake (Node, wrangler, OpenTofu + the Cloudflare
 # provider), so nothing is installed or downloaded ad hoc.
 #
-#   every push / PR   site: npm ci, unit tests, build
+#   every push / PR   site: npm ci, audit (high+ fails), unit tests, build
 #                     infra: tofu fmt + validate, and a plan when secrets exist
 #   push to main      tofu apply, then deploy the built site to Pages
 #
@@ -42,6 +42,7 @@ jobs:
         working-directory: site
         run: |
           nix develop .. -c npm ci --no-fund --no-audit
+          nix develop .. -c npm audit --omit=dev --audit-level=high
           nix develop .. -c npm test
           nix develop .. -c npm run build
 
