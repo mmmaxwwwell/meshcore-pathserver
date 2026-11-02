@@ -69,7 +69,7 @@ def main():
             os.remove(os.path.join(out, f))
     with open(os.path.join(out, name), "wb") as f:
         f.write(body)
-    with open(os.path.join(out, "latest.json"), "w") as f:
+    with open(os.path.join(out, "latest.json"), "w", encoding="utf-8") as f:
         json.dump({"version": 1, "graph": name, "generated": graph["generated"]}, f)
     print(f"{name}: {len(nodes)} nodes, {len(links)} links")
 

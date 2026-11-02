@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Refuse a commit that adds a secret. Installed by the dev shell (core.hooksPath).
+set -euo pipefail
+if ! command -v gitleaks >/dev/null; then
+  echo "pre-commit: gitleaks not on PATH; run inside 'nix develop'" >&2
+  exit 1
+fi
+exec gitleaks git --pre-commit --staged --no-banner --redact --exit-code 1 .

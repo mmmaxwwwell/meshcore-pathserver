@@ -1,0 +1,14 @@
+# Accepted Trivy findings. Every entry says why; anything not listed fails CI.
+licenses:
+  # sharp: Astro's optional image service ships prebuilt libvips (LGPL-3.0).
+  # The site uses no image optimisation, nothing from sharp is in the built
+  # bundle, and LGPL allows dynamic linking. Copyleft anywhere else still fails.
+  - id: LGPL-3.0-or-later
+    paths: ["site/package-lock.json"]
+    statement: sharp/libvips, build-time optional dependency, not shipped
+  - id: Apache-2.0 AND LGPL-3.0-or-later
+    paths: ["site/package-lock.json"]
+    statement: sharp/libvips (win32 builds), as above
+  - id: Apache-2.0 AND LGPL-3.0-or-later AND MIT
+    paths: ["site/package-lock.json"]
+    statement: sharp/libvips (wasm build), as above

@@ -8,3 +8,5 @@ infra/.terraform/
 infra/tfplan
 *.tfstate
 *.tfstate.*
+reports/
+.claude/
